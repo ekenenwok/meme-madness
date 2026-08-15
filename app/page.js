@@ -43,7 +43,6 @@ const ITEM_META = {
   bonus: { icon: Coins, color: GOLD, label: "BONUS" },
 };
 
-// ---- Sound engine: fully generative synthwave score + FX, no audio files ----
 function useSoundEngine() {
   const readyRef = useRef(false);
   const mutedRef = useRef(false);
@@ -162,6 +161,7 @@ export default function MemeMadness() {
   const [playerX, setPlayerX] = useState(50);
   const [flash, setFlash] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [shot, setShot] = useState(null);
 
   const areaRef = useRef(null);
   const rafRef = useRef(null);
@@ -249,7 +249,7 @@ export default function MemeMadness() {
         for (const it of prev) {
           const ny = it.y + baseSpeed * speedScale * (dt / 16.6);
           if (ny >= 86 && ny <= 96 && !it.caught && Math.abs(it.x - px) <= hitboxHalf) {
-            handleCatch(it.type, char);
+            handleCatch(it.type, char, it.x, ny);
             continue;
           }
           if (ny > 104) {
@@ -283,7 +283,13 @@ export default function MemeMadness() {
     setTimeout(() => setFlash((f) => (f && f.key === key ? null : f)), 220);
   };
 
-  const handleCatch = (type, char) => {
+  const fireShot = (toX, toY, color) => {
+    const key = Math.random();
+    setShot({ toX, toY, color, key });
+    setTimeout(() => setShot((sh) => (sh && sh.key === key ? null : sh)), 140);
+  };
+
+  const handleCatch = (type, char, itX, itY) => {
     const s = stateRef.current;
     if (type === "pump") {
       s.combo = Math.min(s.combo + 1, char.comboCap || 6);
@@ -291,11 +297,13 @@ export default function MemeMadness() {
       s.score += Math.round(12 * s.multiplier);
       s.bestCombo = Math.max(s.bestCombo, s.combo);
       doFlash(CYAN);
+      fireShot(itX, itY, CYAN);
       sound.sfx.pump();
     } else if (type === "bonus") {
       s.score += Math.round(60 * s.multiplier);
       s.multiplier = Math.min(s.multiplier + 0.5, 4);
       doFlash(GOLD);
+      fireShot(itX, itY, GOLD);
       sound.sfx.bonus();
       clearTimeout(boostTimerRef.current);
       boostTimerRef.current = setTimeout(() => {
@@ -307,6 +315,7 @@ export default function MemeMadness() {
       s.combo = 0;
       s.multiplier = 1;
       doFlash(DANGER);
+      fireShot(itX, itY, DANGER);
       sound.sfx.rug();
       setLives(s.lives);
       if (s.lives <= 0) {
@@ -318,6 +327,7 @@ export default function MemeMadness() {
       s.combo = 0;
       s.multiplier = 1;
       doFlash(MAG);
+      fireShot(itX, itY, MAG);
       sound.sfx.fud();
     }
     setScore(s.score);
@@ -380,6 +390,7 @@ export default function MemeMadness() {
             items={items}
             playerX={playerX}
             flash={flash}
+            shot={shot}
             onMove={handlePointerMove}
           />
         )}
@@ -488,8 +499,36 @@ function CountdownScreen({ count, char }) {
   );
 }
 
-function PlayScreen({ areaRef, selected, score, lives, timeLeft, combo, multiplier, items, playerX, flash, onMove }) {
-  const Icon = selected.icon;
+function ScopeCore() {
+  return (
+    <div style={{ position: "absolute", top: "36%", left: "50%", transform: "translate(-50%, -50%)", width: 190, height: 190, pointerEvents: "none" }}>
+      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: `1px solid ${CYAN}44`, animation: "spin 14s linear infinite" }} />
+      <div style={{ position: "absolute", inset: 22, borderRadius: "50%", border: `1px dashed ${MAG}55`, animation: "spin 10s linear infinite reverse" }} />
+      <div style={{ position: "absolute", inset: 60, borderRadius: "50%", background: `radial-gradient(circle, ${CYAN}22, transparent 70%)`, border: `1px solid ${CYAN}88` }} />
+      <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: `${CYAN}33` }} />
+      <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: 1, background: `${CYAN}33` }} />
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+function Shooter({ color }) {
+  return (
+    <svg width="46" height="52" viewBox="0 0 46 52" style={{ filter: `drop-shadow(0 0 10px ${color})` }}>
+      <ellipse cx="23" cy="46" rx="10" ry="4" fill={color} opacity="0.25" />
+      <path d="M23 8 a7 7 0 1 1 -0.1 0 Z" fill={color} opacity="0.9" />
+      <path d="M17 6 Q23 -2 30 8 Q26 4 17 6 Z" fill={color} opacity="0.9" />
+      <rect x="19.5" y="9" width="4" height="3" rx="1" fill={BG0} opacity="0.5" />
+      <path d="M16 15 L30 15 L27 34 Q23 37 19 34 Z" fill={color} opacity="0.85" />
+      <rect x="27" y="16" width="16" height="3.4" rx="1.6" fill={color} />
+      <rect x="40" y="13.5" width="4" height="8" rx="1" fill={color} />
+      <rect x="13" y="34" width="6" height="14" rx="2.4" fill={color} opacity="0.9" />
+      <rect x="24" y="34" width="6" height="14" rx="2.4" fill={color} opacity="0.9" />
+    </svg>
+  );
+}
+
+function PlayScreen({ areaRef, selected, score, lives, timeLeft, combo, multiplier, items, playerX, flash, shot, onMove }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       <div style={{ padding: "12px 14px 8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -517,24 +556,33 @@ function PlayScreen({ areaRef, selected, score, lives, timeLeft, combo, multipli
         onPointerMove={onMove}
         onPointerDown={onMove}
         onTouchMove={onMove}
-        style={{ position: "relative", flex: 1, margin: "0 10px 10px", borderRadius: 16, border: "1px solid rgba(0,240,255,0.2)", overflow: "hidden", background: "linear-gradient(180deg, rgba(0,240,255,0.04), rgba(255,46,151,0.05))", touchAction: "none" }}
+        style={{ position: "relative", flex: 1, margin: "0 10px 10px", borderRadius: 16, border: "1px solid rgba(0,240,255,0.2)", overflow: "hidden", background: `linear-gradient(180deg, ${BG1}, ${BG0})`, touchAction: "none" }}
       >
+        <ScopeCore />
+
         {flash && <div style={{ position: "absolute", inset: 0, background: flash.color, opacity: 0.14, pointerEvents: "none" }} />}
+
+        {shot && (
+          <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+            <line x1={`${playerX}%`} y1="90%" x2={`${shot.toX}%`} y2={`${shot.toY}%`} stroke={shot.color} strokeWidth="2.5" opacity="0.9" style={{ filter: `drop-shadow(0 0 6px ${shot.color})` }} />
+          </svg>
+        )}
 
         {items.map((it) => {
           const meta = ITEM_META[it.type];
           const ItemIcon = meta.icon;
           return (
-            <div key={it.id} style={{ position: "absolute", left: `${it.x}%`, top: `${it.y}%`, transform: "translate(-50%, -50%)", display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <ItemIcon size={22} color={meta.color} style={{ filter: `drop-shadow(0 0 8px ${meta.color})` }} />
+            <div key={it.id} style={{ position: "absolute", left: `${it.x}%`, top: `${it.y}%`, transform: "translate(-50%, -50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(10,8,26,0.7)", border: `1.5px solid ${meta.color}`, boxShadow: `0 0 10px ${meta.color}77` }}>
+                <ItemIcon size={17} color={meta.color} />
+              </div>
+              <div style={{ fontSize: 7.5, letterSpacing: 1, color: meta.color, whiteSpace: "nowrap" }}>{meta.label}</div>
             </div>
           );
         })}
 
         <div style={{ position: "absolute", left: `${playerX}%`, top: "90%", transform: "translate(-50%, -50%)" }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", background: `radial-gradient(circle, ${selected.color}44, transparent 70%)`, border: `1.5px solid ${selected.color}`, boxShadow: `0 0 18px ${selected.color}88` }}>
-            <Icon size={22} color={selected.color} />
-          </div>
+          <Shooter color={selected.color} />
         </div>
       </div>
 

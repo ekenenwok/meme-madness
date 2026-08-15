@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Rocket, Skull, Coins, TrendingDown, Heart, Play, RotateCcw, Copy, Zap, Ghost, Flame, Check, Volume2, VolumeX } from "lucide-react";
 import * as Tone from "tone";
